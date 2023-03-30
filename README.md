@@ -13,7 +13,7 @@ Included are the code to define and train the 3D convolutional neural networks a
 
 The PCNN setup for hard constrained E and B field generation with a soft Lorenz gauge constraint is shown in the Figure below.
 <p align="center">
-  <img width="800" height="300" src="https://github.com/alexscheinker/PCNN/blob/main/3D_PCNN_Lorenz.png">
+  <img width="800" height="250" src="https://github.com/alexscheinker/PCNN/blob/main/3D_PCNN_Lorenz.png">
 </p>
 
 One example of generated E and B fields for a 3D electron bunch of varying charge and current density is shown below.
