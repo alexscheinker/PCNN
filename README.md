@@ -11,5 +11,8 @@ Our PCNNs satisfy hard constraints, such as ∇ · B = 0, by construction. Soft 
 
 Included are the code to define and train the 3D convolutional neural networks as well as data sets for testing of the algorithm.
 
+The PCNN setup for hard constrained E and B field generation with a soft Lorenz gauge constraint is shown in the Figure below.
 ![plot](https://github.com/alexscheinker/PCNN/blob/main/3D_PCNN_Lorenz.png)
 
+One example of generated E and B fields for a 3D electron bunch of varying charge and current density is shown below.
+![plot](https://github.com/alexscheinker/PCNN/blob/main/3D_EB_Fields.png)
