@@ -18,5 +18,5 @@ One example of generated E and B fields for a 3D electron bunch of varying charg
 ![plot](https://github.com/alexscheinker/PCNN/blob/main/3D_EB_Fields.png)
 
 <p align="center">
-  <img width="600" height="200" src="https://github.com/alexscheinker/PCNN/blob/main/3D_EB_Fields.png">
+  <img width="600" height="800" src="https://github.com/alexscheinker/PCNN/blob/main/3D_EB_Fields.png">
 </p>
