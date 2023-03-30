@@ -11,4 +11,4 @@ Our PCNNs satisfy hard constraints, such as ∇ · B = 0, by construction. Soft 
 
 Included are the code to define and train the 3D convolutional neural networks as well as data sets for testing of the algorithm.
 
-![alt text](https://github.com/alexscheinker/PCNN/3D_PCNN_Lorenz.png?raw=true)
+![image](https://github.com/alexscheinker/PCNN/3D_PCNN_Lorenz.png?raw=true)
