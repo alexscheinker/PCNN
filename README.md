@@ -3,6 +3,8 @@ Physics Constrained Neural Networks
 
 Cite as: {A. Scheinker and R. Pokharel, Physics Constrained 3D Convolutional Neural Networks for Electrodynamics, APL Machine Learning, 2023}
 
+***
+
 This work presents a physics-constrained neural network (PCNN) approach to solving Maxwell’s equations for the electromagnetic fields of intense relativistic charged particle beams. 
 
 We create a 3D convolutional PCNN to map time-varying current and charge densities J(r,t) and ρ(r,t) to vector and scalar potentials A(r,t) and φ(r,t) from which we generate electromagnetic fields according to Maxwell’s equations: 
