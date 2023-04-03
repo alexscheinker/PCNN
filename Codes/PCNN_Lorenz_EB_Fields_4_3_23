@@ -1,0 +1,536 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+@author: Alexander Scheinker
+"""
+
+# Import some libraries
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+import tensorflow as tf
+
+from tensorflow.keras.layers import Input, Conv3D
+from tensorflow.keras.models import Model
+# from tensorflow.keras import layers
+
+DTYPE = 'float32'
+tf.keras.backend.set_floatx(DTYPE)
+
+
+# Set paths to data and models
+PATH_TO_VOLUME_DATA  = '/mnt/081cfca9-51ce-409e-94df-00758305f95e/SC_PIML/Paper_Data_Models/Volume_Data/'
+PATH_TO_MODELS       = '/mnt/081cfca9-51ce-409e-94df-00758305f95e/SC_PIML/Paper_Data_Models/Trained_Models/'
+
+
+#%%
+
+# The 3D volumes have dimensions n_pixels*n_pixels*n_pixels
+n_pixels = 128
+
+# Import data (Small data set with first 2 time steps.)
+
+# Charge density
+Q = np.zeros([2,n_pixels,n_pixels,n_pixels,1])
+
+# Non-zero charge density locations
+Qnz = np.zeros([2,n_pixels,n_pixels,n_pixels,1])
+
+# Electric field components
+Ex = np.zeros([2,n_pixels,n_pixels,n_pixels,1])
+Ey = np.zeros([2,n_pixels,n_pixels,n_pixels,1])
+Ez = np.zeros([2,n_pixels,n_pixels,n_pixels,1])
+
+# Magnetic field components
+Bx = np.zeros([2,n_pixels,n_pixels,n_pixels,1])
+By = np.zeros([2,n_pixels,n_pixels,n_pixels,1])
+Bz = np.zeros([2,n_pixels,n_pixels,n_pixels,1])
+
+# Current density components
+Jx = np.zeros([2,n_pixels,n_pixels,n_pixels,1])
+Jy = np.zeros([2,n_pixels,n_pixels,n_pixels,1])
+Jz = np.zeros([2,n_pixels,n_pixels,n_pixels,1])
+
+# Load the data
+for n_load in np.arange(2):
+
+    Q[n_load] = np.load(PATH_TO_VOLUME_DATA + f'Q_3D_vol_{n_pixels}_{n_load}.npy').reshape([1,n_pixels,n_pixels,n_pixels,1])
+    
+    Qnz[n_load] = np.load(PATH_TO_VOLUME_DATA + f'Qnz_3D_vol_{n_pixels}_{n_load}.npy').reshape([1,n_pixels,n_pixels,n_pixels,1])
+    
+    Ex[n_load] = np.load(PATH_TO_VOLUME_DATA + f'Ex_3D_vol_{n_pixels}_{n_load}.npy').reshape([1,n_pixels,n_pixels,n_pixels,1])
+    Ey[n_load] = np.load(PATH_TO_VOLUME_DATA + f'Ey_3D_vol_{n_pixels}_{n_load}.npy').reshape([1,n_pixels,n_pixels,n_pixels,1])
+    Ez[n_load] = np.load(PATH_TO_VOLUME_DATA + f'Ez_3D_vol_{n_pixels}_{n_load}.npy').reshape([1,n_pixels,n_pixels,n_pixels,1])
+    
+    Bx[n_load] = np.load(PATH_TO_VOLUME_DATA + f'Bx_3D_vol_{n_pixels}_{n_load}.npy').reshape([1,n_pixels,n_pixels,n_pixels,1])
+    By[n_load] = np.load(PATH_TO_VOLUME_DATA + f'By_3D_vol_{n_pixels}_{n_load}.npy').reshape([1,n_pixels,n_pixels,n_pixels,1])
+    Bz[n_load] = np.load(PATH_TO_VOLUME_DATA + f'Bz_3D_vol_{n_pixels}_{n_load}.npy').reshape([1,n_pixels,n_pixels,n_pixels,1])
+    
+    Jx[n_load] = np.load(PATH_TO_VOLUME_DATA + f'Jx_3D_vol_{n_pixels}_{n_load}.npy').reshape([1,n_pixels,n_pixels,n_pixels,1])
+    Jy[n_load] = np.load(PATH_TO_VOLUME_DATA + f'Jy_3D_vol_{n_pixels}_{n_load}.npy').reshape([1,n_pixels,n_pixels,n_pixels,1])
+    Jz[n_load] = np.load(PATH_TO_VOLUME_DATA + f'Jz_3D_vol_{n_pixels}_{n_load}.npy').reshape([1,n_pixels,n_pixels,n_pixels,1])
+    
+
+# Used to un-normalize PINN and no-physics CNN outputs
+Bxyz_all_max = np.load(PATH_TO_VOLUME_DATA + 'Bxyz_max.npy')
+
+# Normalize CNN inputs
+J_max_max_all_128 = np.load(PATH_TO_VOLUME_DATA+'J_max_max_all_128.npy')
+Q_max_max_all_128 = np.load(PATH_TO_VOLUME_DATA+'Q_max_max_all_128.npy')
+
+Q = Q/Q_max_max_all_128
+
+Jx = Jx/J_max_max_all_128
+Jy = Jy/J_max_max_all_128
+Jz = Jz/J_max_max_all_128
+
+# Make 3D field data for the PINN and No-Physics CNNs for current density
+Jxyz = np.zeros([2,n_pixels,n_pixels,n_pixels,3])
+Jxyz[:,:,:,:,0] = Jx[:,:,:,:,0]
+Jxyz[:,:,:,:,1] = Jy[:,:,:,:,0]
+Jxyz[:,:,:,:,2] = Jz[:,:,:,:,0]
+
+# Non-zero charge density locations
+Qnz_3D = np.zeros([2,n_pixels,n_pixels,n_pixels,3]).astype(np.float32)
+Qnz_3D[:,:,:,:,0] = Qnz[:,:,:,:,0]
+Qnz_3D[:,:,:,:,1] = Qnz[:,:,:,:,0]
+Qnz_3D[:,:,:,:,2] = Qnz[:,:,:,:,0]
+
+
+#%%
+
+# Define the physical space
+
+# Some physics constants
+u0 = tf.constant(4.0*np.pi*1e-7, dtype=DTYPE)
+e0 = tf.constant(8.85*1e-12, dtype=DTYPE)
+cc = tf.constant(2.99792e8, dtype=DTYPE)
+
+# Physical size of the volume around the beam
+x_max_all = 0.0012
+x_min_all = -1*x_max_all
+
+y_max_all = 0.0012
+y_min_all = -1*y_max_all
+
+z_max_all = 0.0022
+z_min_all = -1*z_max_all
+
+# More physics constants
+me = 9.109384e-31
+ce = 2.99792458e8
+qe = 1.602e-19
+
+# Size of one pixel
+dx = (x_max_all-x_min_all)/(n_pixels-1)
+dy = (y_max_all-y_min_all)/(n_pixels-1)
+dz = (z_max_all-z_min_all)/(n_pixels-1)
+
+# Axis for plotting
+x_axis = np.linspace(x_min_all,x_max_all,n_pixels)
+y_axis = np.linspace(y_min_all,y_max_all,n_pixels)
+z_axis = np.linspace(z_min_all,z_max_all,n_pixels)
+
+# Time step between saved beam volumes
+dt = 1.2e-11
+
+# Defined filters for derivatives as a convolutional layer
+d_dx = np.zeros([3,3,3])
+d_dx[0,1,1] = -1
+d_dx[2,1,1] = 1
+d_dx = tf.keras.initializers.Constant(d_dx/2)
+
+d_dy = np.zeros([3,3,3])
+d_dy[1,0,1] = -1
+d_dy[1,2,1] = 1
+d_dy = tf.keras.initializers.Constant(d_dy/2)
+
+d_dz = np.zeros([3,3,3])
+d_dz[1,1,0] = -1
+d_dz[1,1,2] = 1
+d_dz = tf.keras.initializers.Constant(d_dz/2)
+
+# Single layerr 3D CNNs for taking partial x, y, and z derivatives 
+def NN_ddx():
+    X = Input(shape = (n_pixels,n_pixels,n_pixels,1))
+    X_x = Conv3D(1, kernel_size=3, kernel_initializer=d_dx, strides=[1,1,1], padding='SAME', trainable=False)(X)
+    d_dx_model = Model(inputs=[X], outputs=[X_x])
+    return d_dx_model
+
+def NN_ddy():
+    X = Input(shape = (n_pixels,n_pixels,n_pixels,1))
+    X_y = Conv3D(1, kernel_size=3, kernel_initializer=d_dy, strides=[1,1,1], padding='SAME', trainable=False)(X)
+    d_dy_model = Model(inputs=[X], outputs=[X_y])
+    return d_dy_model
+
+def NN_ddz():
+    X = Input(shape = (n_pixels,n_pixels,n_pixels,1))
+    X_z = Conv3D(1, kernel_size=3, kernel_initializer=d_dz, strides=[1,1,1], padding='SAME', trainable=False)(X)
+    d_dz_model = Model(inputs=[X], outputs=[X_z])
+    return d_dz_model
+
+# Partial Derivative CNNs
+mNN_ddx = NN_ddx()
+mNN_ddy = NN_ddy()
+mNN_ddz = NN_ddz()
+
+# Latent space inputs, un-used, all zeros
+z_input = np.zeros([2,8,8,8,1]).astype(np.float32)
+
+
+# Make Edge cut
+Edge_Cut = np.ones([1,128,128,128,1]).astype(np.float32)
+
+xxx = np.arange(128)
+yyy = np.arange(128)
+zzz = np.arange(128)
+
+XXX, YYY, ZZZ = np.meshgrid(xxx,yyy,zzz)
+iii = np.where((XXX-127/2)**2 + (YYY-127/2)**2 + (ZZZ-127/2)**2 > 60**2)
+Edge_Cut[0,iii[0],iii[1],iii[2],0] = 0.0
+
+#%%
+
+
+# Import trained models
+
+A_Lorentz_model_name = 'PCNN_A_Lorenz.h5'
+model_A = tf.keras.models.load_model(PATH_TO_MODELS+A_Lorentz_model_name)
+
+
+V_Lorentz_model_name = 'PCNN_V_Lorenz.h5'
+model_V = tf.keras.models.load_model(PATH_TO_MODELS+V_Lorentz_model_name)
+
+
+# Define functions
+def B_fields(A_model,Jx_in1,Jy_in1,Jz_in1,A_cut_now1,ES_in1):
+    
+    # Calculate vector potential fields
+    Ax1, Ax1_yL = A_model([Jx_in1,ES_in1])
+    Ay1, Ay1_yL = A_model([Jy_in1,ES_in1])
+    Az1, Az1_yL = A_model([Jz_in1,ES_in1])
+    
+    # Take derivatives
+    Ax1_y = mNN_ddy(Ax1)/dy
+    Ax1_z = mNN_ddz(Ax1)/dz
+    
+    Ay1_x = mNN_ddx(Ay1)/dx
+    Ay1_z = mNN_ddz(Ay1)/dz
+    
+    Az1_x = mNN_ddx(Az1)/dx
+    Az1_y = mNN_ddy(Az1)/dy
+    
+    # Magnetic Fields
+    Bx1 = Az1_y - Ay1_z
+    By1 = Ax1_z - Az1_x
+    Bz1 = Ay1_x - Ax1_y
+    
+    Bx1 = Bx1*A_cut_now1
+    By1 = By1*A_cut_now1
+    Bz1 = Bz1*A_cut_now1
+    
+    return Ax1, Ay1, Az1, Bx1, By1, Bz1
+
+
+
+def A_fields_only(A_model,Jx_in1,Jy_in1,Jz_in1,A_cut_now1,ES_in1):
+    
+    # Calculate vector potential fields
+    Ax1, Ax1_yL = A_model([Jx_in1,ES_in1])
+    Ay1, Ay1_yL = A_model([Jy_in1,ES_in1])
+    Az1, Az1_yL = A_model([Jz_in1,ES_in1])
+    
+    # Cut off
+    Ax1 = Ax1*A_cut_now1
+    Ay1 = Ay1*A_cut_now1
+    Az1 = Az1*A_cut_now1
+    
+    return Ax1, Ay1, Az1
+
+
+
+def E_fields(V_model,Q_in2,Ax2_t,Ay2_t,Az2_t,A_cut_now2,ES_in1):
+    
+    # Calculate voltage fields
+    V2, V2_yL = V_model([Q_in2,ES_in1])
+    
+    # Take derivatives
+    V2_x = mNN_ddx(V2)/dx
+    V2_y = mNN_ddy(V2)/dy
+    V2_z = mNN_ddz(V2)/dz
+
+    # Electric fields
+    Ex2 = -Ax2_t - V2_x
+    Ey2 = -Ay2_t - V2_y
+    Ez2 = -Az2_t - V2_z
+    
+    Ex2 = Ex2*A_cut_now2
+    Ey2 = Ey2*A_cut_now2
+    Ez2 = Ez2*A_cut_now2
+    
+    return V2, Ex2, Ey2, Ez2
+    
+
+
+
+
+def V_fields_only(V_model,Q_in2,A_cut_now2,ES_in1):
+    
+    # Calculate voltage fields
+    V2, V2_yL = V_model([Q_in2,ES_in1])
+    
+    # Cut off
+    V2 = V2*A_cut_now2
+    
+    return V2
+
+#%%
+
+
+n_load_now = 0
+
+
+print(f'Plotting image number {n_load_now}.')
+n_check = n_load_now
+n_fig_now = n_load_now 
+
+ES_in1 = z_input[n_check:n_check+1]
+
+Jx_in1 = Jx[n_check+0:n_check+1]*Edge_Cut
+Jy_in1 = Jy[n_check+0:n_check+1]*Edge_Cut
+Jz_in1 = Jz[n_check+0:n_check+1]*Edge_Cut
+A_cut_now1 = Qnz[n_check+0:n_check+1]*Edge_Cut
+
+
+Jx_in2 = Jx[n_check+1:n_check+2]*Edge_Cut
+Jy_in2 = Jy[n_check+1:n_check+2]*Edge_Cut
+Jz_in2 = Jz[n_check+1:n_check+2]*Edge_Cut
+A_cut_now2 = Qnz[n_check+1:n_check+2]*Edge_Cut
+
+Q_in2 = Q[n_check+1:n_check+2]*Edge_Cut
+
+Bx_true2 = Bx[n_check+1:n_check+2]*Edge_Cut
+By_true2 = By[n_check+1:n_check+2]*Edge_Cut
+Bz_true2 = Bz[n_check+1:n_check+2]*Edge_Cut
+
+Ex_true2 = Ex[n_check+1:n_check+2]*Edge_Cut
+Ey_true2 = Ey[n_check+1:n_check+2]*Edge_Cut
+Ez_true2 = Ez[n_check+1:n_check+2]*Edge_Cut
+
+
+# Calculate A and B fields
+Ax1, Ay1, Az1 = A_fields_only(model_A,Jx_in1,Jy_in1,Jz_in1,A_cut_now1,ES_in1)
+Ax2, Ay2, Az2, Bx1, By1, Bz1 = B_fields(model_A,Jx_in2,Jy_in2,Jz_in2,A_cut_now2,ES_in1)
+
+Bx1 = Bx1
+By1 = By1
+Bz1 = Bz1
+
+# Time derivatives of vector potentials
+Ax2_t = (Ax2-Ax1)*A_cut_now2*A_cut_now1/(dt)
+Ay2_t = (Ay2-Ay1)*A_cut_now2*A_cut_now1/(dt)
+Az2_t = (Az2-Az1)*A_cut_now2*A_cut_now1/(dt)
+
+# Calculate V and E fields
+#V1 = V_fields_only(model_V,Q_in1,A_cut_now1,ES_in1)
+V2, Ex1, Ey1, Ez1 = E_fields(model_V,Q_in2,Ax2_t,Ay2_t,Az2_t,A_cut_now2,ES_in1)
+
+
+
+n_slice = 40
+nxyz = 128
+x = np.linspace(-x_max_all,x_max_all,nxyz)
+y = np.linspace(-y_max_all,y_max_all,nxyz)
+z = np.linspace(-z_max_all,z_max_all,nxyz)
+  
+# Meshgrid for X, Y, Z
+Xxy,Yxy = np.meshgrid(x,y)
+Xxz,Zxz = np.meshgrid(x,z)
+Yyz,Zyz = np.meshgrid(y,z)
+
+
+# Correct B fields
+Bx_v = Bx[n_check+1,:,:,n_slice,0]*Edge_Cut[0,:,:,n_slice,0]
+By_v = By[n_check+1,:,:,n_slice,0]*Edge_Cut[0,:,:,n_slice,0]
+Bz_v = Bz[n_check+1,:,:,n_slice,0]*Edge_Cut[0,:,:,n_slice,0]
+
+# Correct E fields
+Ex_v = Ex[n_check+1,:,:,n_slice,0]*Edge_Cut[0,:,:,n_slice,0]
+Ey_v = Ey[n_check+1,:,:,n_slice,0]*Edge_Cut[0,:,:,n_slice,0]
+Ez_v = Ez[n_check+1,:,:,n_slice,0]*Edge_Cut[0,:,:,n_slice,0]
+
+ES_now = z_input[n_check+1:n_check+2]
+Jx_now = Jx[n_check+1:n_check+2]
+Jy_now = Jy[n_check+1:n_check+2]
+Jz_now = Jz[n_check+1:n_check+2]
+Qnz_now = Qnz[n_check+1:n_check+2]
+
+
+A_xy = Qnz[n_check,:,:,n_slice]
+iii = np.where(A_xy>0)
+
+n_div = 6
+len2 = int(len(iii[0])/n_div)
+iii_2 = tuple([np.zeros(len2),np.zeros(len2)])
+for n in np.arange(len2):
+    iii_2[0][n] = iii[0][n_div*n]
+    iii_2[1][n] = iii[1][n_div*n]
+
+iii = tuple(np.copy(iii_2).astype(int))
+
+Bx_v = Bx_v[iii[0],iii[1]]
+By_v = By_v[iii[0],iii[1]]
+Bz_v = Bz_v[iii[0],iii[1]]
+
+Ex_v = Ex_v[iii[0],iii[1]]
+Ey_v = Ey_v[iii[0],iii[1]]
+Ez_v = Ez_v[iii[0],iii[1]]
+
+X2 = np.zeros([nxyz,nxyz])
+Y2 = np.zeros([nxyz,nxyz])
+for n1 in np.arange(nxyz):
+    for n2 in np.arange(nxyz):
+        X2[n1,n2] = Xxy[n2,n1]
+        Y2[n1,n2] = Yxy[n2,n1]
+        
+X2 = X2[iii[0],iii[1]]
+Y2 = Y2[iii[0],iii[1]]
+
+
+Bxy_length_v = (Bx_v**2+By_v**2)**0.5
+Bxz_length_v = (Bx_v**2+Bz_v**2)**0.5
+Byz_length_v = (By_v**2+Bz_v**2)**0.5
+
+Exy_length_v = (Ex_v**2+Ey_v**2)**0.5
+Exz_length_v = (Ex_v**2+Ez_v**2)**0.5
+Eyz_length_v = (Ey_v**2+Ez_v**2)**0.5
+
+# Assign A-model vector directions
+Bx_v_pred_A = Bx1[0,:,:,n_slice,0].numpy()
+By_v_pred_A = By1[0,:,:,n_slice,0].numpy()
+Bz_v_pred_A = Bz1[0,:,:,n_slice,0].numpy()
+
+Bx_v_pred_A = Bx_v_pred_A[iii[0],iii[1]]
+By_v_pred_A = By_v_pred_A[iii[0],iii[1]]
+Bz_v_pred_A = Bz_v_pred_A[iii[0],iii[1]]
+
+Bxy_length_v_pred_A = (Bx_v_pred_A**2+By_v_pred_A**2)**0.5
+Bxz_length_v_pred_A = (Bx_v_pred_A**2+Bz_v_pred_A**2)**0.5
+Byz_length_v_pred_A = (By_v_pred_A**2+Bz_v_pred_A**2)**0.5
+
+
+# Assign B-model vector directions
+Ex1 = Ex1.numpy()
+Ey1 = Ey1.numpy()
+Ez1 = Ez1.numpy()
+
+Ex_v_pred_E = Ex1[0,:,:,n_slice,0]
+Ey_v_pred_E = Ey1[0,:,:,n_slice,0]
+Ez_v_pred_E = Ez1[0,:,:,n_slice,0]
+
+Ex_v_pred_E = Ex_v_pred_E[iii[0],iii[1]]
+Ey_v_pred_E = Ey_v_pred_E[iii[0],iii[1]]
+Ez_v_pred_E = Ez_v_pred_E[iii[0],iii[1]]
+
+Exy_length_v_pred_E = (Ex_v_pred_E**2+Ey_v_pred_E**2)**0.5
+Exz_length_v_pred_E = (Ex_v_pred_E**2+Ez_v_pred_E**2)**0.5
+Eyz_length_v_pred_E = (Ey_v_pred_E**2+Ez_v_pred_E**2)**0.5
+
+
+
+
+x_plot_lim = x_max_all/1
+y_plot_lim = y_max_all/1
+z_plot_lim = z_max_all/1
+
+Bcmap_now = 'hsv'
+Ecmap_now = 'hsv'
+back_map = 'gray'
+
+B_scale = 0.75
+E_scale = 2e8
+
+#plt.figure(4,figsize=(22.5,5.5))
+plt.figure(n_fig_now,figsize=(26,3.75))
+
+
+plt.subplot(1,6,1)
+plt.quiver(Y2/1e-3,X2/1e-3,By_v,Bx_v,Bxy_length_v,cmap=Bcmap_now,scale=B_scale,linewidth=2,alpha=0.5,minlength=0.1)
+plt.clim(vmin=np.min(Bxy_length_v),vmax=np.max(Bxy_length_v))
+plt.colorbar()
+plt.imshow(np.sum(Q[n_check,:,:,:,0],2),aspect='auto',cmap=back_map,extent=(x_min_all/1e-3,x_max_all/1e-3,y_min_all/1e-3,y_max_all/1e-3),origin='lower')
+plt.title(r'$\left (B_x,B_y \right )$')
+plt.xlim([-x_plot_lim/1e-3,x_plot_lim/1e-3])
+plt.ylim([-y_plot_lim/1e-3,y_plot_lim/1e-3])
+plt.xlabel('y [mm]')
+plt.ylabel('x [mm]')
+
+
+plt.subplot(1,6,2)
+plt.quiver(Y2/1e-3,X2/1e-3,By_v_pred_A,Bx_v_pred_A,Bxy_length_v_pred_A,cmap=Bcmap_now,scale=B_scale,linewidth=2,alpha=0.5,minlength=0.1)
+plt.clim(vmin=np.min(Bxy_length_v),vmax=np.max(Bxy_length_v))
+plt.colorbar()
+plt.imshow(np.sum(Q[n_check,:,:,:,0],2),aspect='auto',cmap=back_map,extent=(x_min_all/1e-3,x_max_all/1e-3,y_min_all/1e-3,y_max_all/1e-3),origin='lower')
+plt.title(r'$\left (\hat{B}_x,\hat{B}_y \right )$')
+plt.xlim([-x_plot_lim/1e-3,x_plot_lim/1e-3])
+plt.ylim([-y_plot_lim/1e-3,y_plot_lim/1e-3])
+plt.xlabel('y [mm]')
+plt.ylabel('x [mm]')
+
+
+plt.subplot(1,6,3)
+plt.quiver(Y2/1e-3,X2/1e-3,By_v-By_v_pred_A,Bx_v-Bx_v_pred_A,Bxy_length_v-Bxy_length_v_pred_A,cmap=Bcmap_now,scale=B_scale,linewidth=2,alpha=0.5,minlength=0.1)
+plt.clim(vmin=-np.max(Bxy_length_v),vmax=np.max(Bxy_length_v))
+plt.colorbar()
+plt.imshow(np.sum(Q[n_check,:,:,:,0],2),aspect='auto',cmap=back_map,extent=(x_min_all/1e-3,x_max_all/1e-3,y_min_all/1e-3,y_max_all/1e-3),origin='lower')
+plt.title(r'$\left (B_x-\hat{B}_x,B_y-\hat{B}_y \right )$')
+plt.xlim([-x_plot_lim/1e-3,x_plot_lim/1e-3])
+plt.ylim([-y_plot_lim/1e-3,y_plot_lim/1e-3])
+plt.xlabel('y [mm]')
+plt.ylabel('x [mm]')
+
+
+
+# E fields !
+
+plt.subplot(1,6,4)
+plt.quiver(Y2/1e-3,X2/1e-3,Ey_v,Ex_v,Exy_length_v,cmap=Ecmap_now,scale=E_scale,linewidth=2,alpha=0.5,minlength=0.1)
+plt.clim(vmin=np.min(Exy_length_v),vmax=np.max(Exy_length_v))
+plt.colorbar()
+plt.imshow(np.sum(Q[n_check,:,:,:,0],2),aspect='auto',cmap=back_map,extent=(x_min_all/1e-3,x_max_all/1e-3,y_min_all/1e-3,y_max_all/1e-3),origin='lower')
+plt.title(r'$\left (E_x,E_y \right )$')
+plt.xlim([-x_plot_lim/1e-3,x_plot_lim/1e-3])
+plt.ylim([-y_plot_lim/1e-3,y_plot_lim/1e-3])
+plt.xlabel('y [mm]')
+plt.ylabel('x [mm]')
+
+
+plt.subplot(1,6,5)
+plt.quiver(Y2/1e-3,X2/1e-3,Ey_v_pred_E,Ex_v_pred_E,Exy_length_v_pred_E,cmap=Ecmap_now,scale=E_scale,linewidth=2,alpha=0.5,minlength=0.1)
+plt.clim(vmin=np.min(Exy_length_v),vmax=np.max(Exy_length_v))
+plt.colorbar()
+plt.imshow(np.sum(Q[n_check,:,:,:,0],2),aspect='auto',cmap=back_map,extent=(x_min_all/1e-3,x_max_all/1e-3,y_min_all/1e-3,y_max_all/1e-3),origin='lower')
+plt.title(r'$\left (\hat{E}_x,\hat{E}_y \right )$')
+plt.xlim([-x_plot_lim/1e-3,x_plot_lim/1e-3])
+plt.ylim([-y_plot_lim/1e-3,y_plot_lim/1e-3])
+plt.xlabel('y [mm]')
+plt.ylabel('x [mm]')
+
+plt.subplot(1,6,6)
+plt.quiver(Y2/1e-3,X2/1e-3,Ey_v-Ey_v_pred_E,Ex_v-Ex_v_pred_E,Exy_length_v-Exy_length_v_pred_E,cmap=Ecmap_now,scale=E_scale,linewidth=2,alpha=0.5,minlength=0.1)
+plt.clim(vmin=-np.max(Exy_length_v),vmax=np.max(Exy_length_v))
+plt.colorbar()
+plt.imshow(np.sum(Q[n_check,:,:,:,0],2),aspect='auto',cmap=back_map,extent=(x_min_all/1e-3,x_max_all/1e-3,y_min_all/1e-3,y_max_all/1e-3),origin='lower')
+plt.title(r'$\left (E_x-\hat{E}_x,E_y-\hat{E}_y \right )$')
+plt.xlim([-x_plot_lim/1e-3,x_plot_lim/1e-3])
+plt.ylim([-y_plot_lim/1e-3,y_plot_lim/1e-3])
+plt.xlabel('y [mm]')
+plt.ylabel('x [mm]')
+
+
+
+plt.tight_layout()
+
+
+
