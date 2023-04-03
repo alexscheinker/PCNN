@@ -1,6 +1,8 @@
 # PCNN
 Physics Constrained Neural Networks
 
+LANL public release: LA-UR-23-21008
+
 ***
 
 Cite as:
