@@ -1,6 +1,8 @@
 # PCNN
 Physics Constrained Neural Networks
 
+***
+
 Cite as: {A. Scheinker and R. Pokharel, Physics Constrained 3D Convolutional Neural Networks for Electrodynamics, APL Machine Learning, 2023}
 
 ***
