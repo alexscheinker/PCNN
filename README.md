@@ -26,7 +26,7 @@ We look at an (x,y) slice in the middle of the beam, as shown with normalized ch
   <img width="350" height="300" src="https://github.com/alexscheinker/PCNN/blob/main/XY_Beam_Slice.png">
 </p>
 
-In the attached code "Check_Divergence" we generate the magnetic field B using a regular CNN without physics constraints, a PINN-based B field, a PCNN-based B field, and the Lorenz PCNN B field. We then calculate the divergence of the B field in each case, as shown below.
+In the attached code "Check_Divergence" we generate the magnetic field B using a regular CNN without physics constraints, a PINN-based B field, a PCNN-based B field, and the Lorenz PCNN B field. We then calculate the divergence of the B field in each case, and show the (x,y), (x,z), and (y,z) projections of the mid-slice of the beam, as shown below.
 
 <p align="center">
   <img width="800" height="800" src="https://github.com/alexscheinker/PCNN/blob/main/Divergence_Compared.png">
