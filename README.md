@@ -25,7 +25,7 @@ In the attached code "Check_Divergence" we generate the magnetic field B using a
 
 We look at an (x,y) slice in the middle of the beam, as shown with normalized charge density in the image below.
 <p align="center">
-  <img width="500" height="500" src="https://github.com/alexscheinker/PCNN/blob/main/3D_EB_Fields.png">
+  <img width="500" height="500" src="https://github.com/alexscheinker/PCNN/blob/main/XY_Beam_Slice.png">
 </p>
 
 
