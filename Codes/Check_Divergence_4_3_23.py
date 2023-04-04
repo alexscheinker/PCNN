@@ -20,8 +20,8 @@ tf.keras.backend.set_floatx(DTYPE)
 
 
 # Set paths to data and models
-PATH_TO_VOLUME_DATA  = '/mnt/081cfca9-51ce-409e-94df-00758305f95e/SC_PIML/Paper_Data_Models/Volume_Data/'
-PATH_TO_MODELS       = '/mnt/081cfca9-51ce-409e-94df-00758305f95e/SC_PIML/Paper_Data_Models/Trained_Models/'
+PATH_TO_VOLUME_DATA  = '.../Volume_Data/'
+PATH_TO_MODELS       = '.../Trained_Models/'
 
 
 #%%
